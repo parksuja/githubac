@@ -1,0 +1,62 @@
+# Workflow 이름
+name: CI
+
+# pull request가 생성되면 작동
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php: [8.0]
+        laravel: [^8.0]
+
+    # 작업 이름
+    name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}
+
+    services:
+      # mysql 서비스 생성
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: example_app
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      # 애플리케이션에 필요한 PHP 확장 모듈 설치
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip
+          tools: composer:v2
+          coverage: none
+      
+      # 코드 checkout
+      - uses: actions/checkout@v2
+
+      # .env 파일 생성
+      - name: Copy .env
+        run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+      # 애플리케이션 의존성 패키지 설치
+      - name: Install Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      # 애플리케이션 npm 패키지 설치
+      - name: Install NPM Dependencies
+        run: npm install
+      # 애플리케이션 Key 생성
+      - name: Generate KEY
+        run: php artisan key:generate
+      # public 저장소 연결
+      - name: Create symbolic storage link
+        run: php artisan storage:link
+      # Test 실행
+      - name: Execute tests (Unit and Feature tests) via PHPUnit
+        run: php artisan test
